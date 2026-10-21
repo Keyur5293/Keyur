@@ -15,11 +15,11 @@
             "type": "String"
         },
         "startNumber": {
-            "defaultValue": 10,
+            "defaultValue": 1,
             "type": "Int"
         },
         "vmCount": {
-            "defaultValue": 7,
+            "defaultValue": 1,
             "minValue": 1,
             "maxValue": 50,
             "type": "Int"
@@ -71,7 +71,7 @@
             "type": "String"
         },
         "imageSku": {
-            "defaultValue": "2025-datacenter-g2",
+            "defaultValue": "2025-datacenter",
             "type": "String"
         },
         "imageVersion": {
