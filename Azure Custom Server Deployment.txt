@@ -1,0 +1,283 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "location": {
+            "defaultValue": "eastus",
+            "type": "String"
+        },
+        "zone": {
+            "defaultValue": "1",
+            "type": "String"
+        },
+        "vmNamePrefix": {
+            "defaultValue": "EUS-DDECOMM",
+            "type": "String"
+        },
+        "startNumber": {
+            "defaultValue": 1,
+            "type": "Int"
+        },
+        "vmCount": {
+            "defaultValue": 1,
+            "minValue": 1,
+            "maxValue": 50,
+            "type": "Int"
+        },
+        "vmSize": {
+            "defaultValue": "Standard_B2s_v2",
+            "type": "String"
+        },
+        "osDiskSku": {
+            "defaultValue": "Premium_LRS",
+            "type": "String"
+        },
+        "osDiskSizeGB": {
+            "defaultValue": 127,
+            "type": "Int"
+        },
+        "dataDiskSku": {
+            "defaultValue": "Standard_LRS",
+            "type": "String"
+        },
+        "dataDiskSizeGB": {
+            "defaultValue": 32,
+            "type": "Int"
+        },
+        "networkResourceGroup": {
+            "defaultValue": "kac_ghs_network_eus_dev_rg",
+            "type": "String"
+        },
+        "vnetName": {
+            "defaultValue": "kac-eus-dev-ghs-spoke-vnet",
+            "type": "String"
+        },
+        "subnetName": {
+            "defaultValue": "kac-eus-dev-ghs-app-subnet",
+            "type": "String"
+        },
+        "adminUsername": {
+            "type": "String"
+        },
+        "adminPassword": {
+            "type": "SecureString"
+        },
+        "imagePublisher": {
+            "defaultValue": "MicrosoftWindowsServer",
+            "type": "String"
+        },
+        "imageOffer": {
+            "defaultValue": "WindowsServer",
+            "type": "String"
+        },
+        "imageSku": {
+            "defaultValue": "2025-datacenter",
+            "type": "String"
+        },
+        "imageVersion": {
+            "defaultValue": "latest",
+            "type": "String"
+        },
+        "joinDomain": {
+            "defaultValue": false,
+            "type": "Bool",
+            "metadata": {
+                "description": "Set true to domain-join each VM right after it is created."
+            }
+        },
+        "domainName": {
+            "defaultValue": "",
+            "type": "String",
+            "metadata": {
+                "description": "FQDN of the domain to join, e.g. contoso.com. Required when joinDomain = true."
+            }
+        },
+        "domainOuPath": {
+            "defaultValue": "",
+            "type": "String",
+            "metadata": {
+                "description": "Optional target OU DN, e.g. OU=Servers,DC=contoso,DC=com. Blank = default Computers container."
+            }
+        },
+        "domainJoinUsername": {
+            "defaultValue": "",
+            "type": "String",
+            "metadata": {
+                "description": "Account allowed to create computer objects, e.g. DOMAIN\\user or user@domain.com."
+            }
+        },
+        "domainJoinPassword": {
+            "defaultValue": "",
+            "type": "SecureString"
+        },
+        "domainJoinRestart": {
+            "defaultValue": true,
+            "type": "Bool"
+        },
+        "tags": {
+            "defaultValue": {
+                "App Owner": "daoud",
+                "Application": "Automation IAC",
+                "Business Team": "",
+                "Company": "KAC",
+                "Cost Center": "4X157",
+                "Environment": "QA",
+                "Expiration Date": "",
+                "IT Team": "Enterprise Hosting Services",
+                "Project": "Automation IAC",
+                "Review Date": "",
+                "Service Now Request": "",
+                "VM Created": ""
+            },
+            "type": "Object"
+        }
+    },
+    "variables": {
+        "subnetId": "[resourceId(parameters('networkResourceGroup'), 'Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('subnetName'))]",
+        "copy": [
+            {
+                "name": "vmNames",
+                "count": "[parameters('vmCount')]",
+                "input": "[concat(parameters('vmNamePrefix'), padLeft(string(add(parameters('startNumber'), copyIndex('vmNames'))), 2, '0'))]"
+            }
+        ]
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2024-05-01",
+            "name": "[concat(variables('vmNames')[copyIndex()], '-NIC-01')]",
+            "location": "[parameters('location')]",
+            "tags": "[parameters('tags')]",
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig1",
+                        "properties": {
+                            "primary": true,
+                            "privateIPAllocationMethod": "Dynamic",
+                            "subnet": {
+                                "id": "[variables('subnetId')]"
+                            }
+                        }
+                    }
+                ]
+            },
+            "copy": {
+                "name": "nicLoop",
+                "count": "[parameters('vmCount')]"
+            }
+        },
+        {
+            "type": "Microsoft.Compute/virtualMachines",
+            "apiVersion": "2024-07-01",
+            "name": "[variables('vmNames')[copyIndex()]]",
+            "location": "[parameters('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('vmNames')[copyIndex()], '-NIC-01'))]"
+            ],
+            "tags": "[parameters('tags')]",
+            "zones": [
+                "[parameters('zone')]"
+            ],
+            "properties": {
+                "hardwareProfile": {
+                    "vmSize": "[parameters('vmSize')]"
+                },
+                "licenseType": "Windows_Server",
+                "osProfile": {
+                    "computerName": "[variables('vmNames')[copyIndex()]]",
+                    "adminUsername": "[parameters('adminUsername')]",
+                    "adminPassword": "[parameters('adminPassword')]",
+                    "windowsConfiguration": {
+                        "provisionVMAgent": true,
+                        "enableAutomaticUpdates": true
+                    }
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "[parameters('imagePublisher')]",
+                        "offer": "[parameters('imageOffer')]",
+                        "sku": "[parameters('imageSku')]",
+                        "version": "[parameters('imageVersion')]"
+                    },
+                    "osDisk": {
+                        "name": "[concat(variables('vmNames')[copyIndex()], '.OSDisk.vhd')]",
+                        "osType": "Windows",
+                        "createOption": "FromImage",
+                        "caching": "ReadWrite",
+                        "diskSizeGB": "[parameters('osDiskSizeGB')]",
+                        "deleteOption": "Detach",
+                        "managedDisk": {
+                            "storageAccountType": "[parameters('osDiskSku')]"
+                        }
+                    },
+                    "dataDisks": [
+                        {
+                            "name": "[concat(variables('vmNames')[copyIndex()], '-DataDisk-01')]",
+                            "lun": 0,
+                            "createOption": "Empty",
+                            "caching": "None",
+                            "diskSizeGB": "[parameters('dataDiskSizeGB')]",
+                            "deleteOption": "Detach",
+                            "managedDisk": {
+                                "storageAccountType": "[parameters('dataDiskSku')]"
+                            }
+                        }
+                    ]
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('vmNames')[copyIndex()], '-NIC-01'))]",
+                            "properties": {
+                                "primary": true
+                            }
+                        }
+                    ]
+                }
+            },
+            "copy": {
+                "name": "vmLoop",
+                "count": "[parameters('vmCount')]"
+            }
+        },
+        {
+            "type": "Microsoft.Compute/virtualMachines/extensions",
+            "apiVersion": "2024-07-01",
+            "name": "[concat(variables('vmNames')[copyIndex()], '/joindomain')]",
+            "location": "[parameters('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Compute/virtualMachines', variables('vmNames')[copyIndex()])]"
+            ],
+            "tags": "[parameters('tags')]",
+            "properties": {
+                "publisher": "Microsoft.Compute",
+                "type": "JsonADDomainExtension",
+                "typeHandlerVersion": "1.3",
+                "autoUpgradeMinorVersion": true,
+                "settings": {
+                    "Name": "[parameters('domainName')]",
+                    "OUPath": "[parameters('domainOuPath')]",
+                    "User": "[parameters('domainJoinUsername')]",
+                    "Restart": "[string(parameters('domainJoinRestart'))]",
+                    "Options": "3"
+                },
+                "protectedSettings": {
+                    "Password": "[parameters('domainJoinPassword')]"
+                }
+            },
+            "copy": {
+                "name": "domainJoinLoop",
+                "count": "[parameters('vmCount')]"
+            },
+            "condition": "[parameters('joinDomain')]"
+        }
+    ],
+    "outputs": {
+        "vmNames": {
+            "type": "Array",
+            "value": "[variables('vmNames')]"
+        }
+    }
+}
